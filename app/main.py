@@ -316,6 +316,31 @@ def update_fatura_status(id: str, status: str = Query(...), db: Session = Depend
     db.refresh(fatura)
     return fatura
 
+@app.delete("/api/faturas/{id}")
+def delete_fatura(id: str, db: Session = Depends(get_db)):
+    fatura = db.query(models.Fatura).filter(models.Fatura.id == id).first()
+    if not fatura:
+        raise HTTPException(status_code=404, detail="Fatura não encontrada")
+    
+    # Se estava confirmada, devolver stock e ajustar balanço do cliente antes de apagar
+    if fatura.status == "CONFIRMADA":
+        for item in fatura.itens:
+            produto = db.query(models.Produto).filter(models.Produto.id == item.produto_id).first()
+            if produto:
+                produto.stock += item.quantidade
+        
+        cliente = fatura.cliente
+        if cliente:
+            cliente.total_faturas = max(0, cliente.total_faturas - 1)
+            if cliente.limite_credito > 0:
+                cliente.divida = max(0.0, cliente.divida - fatura.total)
+                if cliente.divida == 0:
+                    cliente.status = "Em Dia"
+
+    db.delete(fatura)
+    db.commit()
+    return {"message": "Fatura eliminada com sucesso"}
+
 # ════════════════════════════════════════════════════════════
 #  ENDPOINTS: HISTÓRICO DE PREÇOS
 # ════════════════════════════════════════════════════════════
