@@ -77,6 +77,40 @@ O servidor estará ativo em: **`http://localhost:8000`**
 
 ---
 
+## 🐳 Como Iniciar via Docker (Recomendado 🚀)
+
+O backend possui suporte completo e otimizado a **Docker** e **Docker Compose**, separando a aplicação FastAPI e a base de dados PostgreSQL em containers isolados seguindo as melhores práticas.
+
+### 1. Iniciar os Serviços
+Para subir a base de dados e a API FastAPI em segundo plano, basta executar o seguinte comando dentro da pasta `/back`:
+
+```bash
+docker compose up -d
+```
+
+Este comando irá:
+1. Descarregar a imagem oficial do **PostgreSQL 15 Alpine**.
+2. Compilar a imagem customizada para o motor do **FastAPI em Python 3.12-slim**.
+3. Iniciar o Postgres na porta interna `5432` e mapear a porta `5434` para o seu computador local (mantendo a compatibilidade).
+4. Executar o script de arranque inteligente `start.sh`, que aguarda a base de dados estar operacional, inicializa as tabelas relacionais do PostgreSQL (se vazias, mantendo os dados persistidos nos reinícios) e roda o Uvicorn na porta `8000`.
+
+### 2. Verificar o Estado dos Containers
+```bash
+docker compose ps
+```
+
+### 3. Visualizar logs em Tempo Real
+```bash
+docker compose logs -f
+```
+
+### 4. Parar os Serviços
+```bash
+docker compose down
+```
+
+---
+
 ## 📡 Referência Rápida da API
 
 ### 👥 Clientes
