@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from app.database import Base, engine, SessionLocal
 from app import models
 
-def db_init():
+def db_init(drop_first=True):
     print("Inicializando tabelas na base de dados PostgreSQL...")
     # Cria todas as tabelas no PostgreSQL
-    Base.metadata.drop_all(bind=engine)
+    if drop_first:
+        Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     print("Tabelas criadas com sucesso.")
 
@@ -246,4 +247,19 @@ def db_init():
         db.close()
 
 if __name__ == "__main__":
-    db_init()
+    if "--if-empty" in sys.argv:
+        db = SessionLocal()
+        try:
+            Base.metadata.create_all(bind=engine)
+            count = db.query(models.Operador).count()
+            if count > 0:
+                print("Base de dados PostgreSQL já contém dados. Ignorando seeding inicial.")
+                sys.exit(0)
+            print("Base de dados vazia. A proceder à inicialização de demonstração...")
+        except Exception as e:
+            print(f"Erro ao verificar base de dados: {e}")
+        finally:
+            db.close()
+        db_init(drop_first=False)
+    else:
+        db_init(drop_first=True)
