@@ -1,0 +1,11 @@
+# Ignorar ficheiros locais que não devem ir para o container Docker
+venv/
+db_data/
+__pycache__/
+*.pyc
+*.log
+.git/
+.gitignore
+.env
+Dockerfile
+docker-compose.yml
