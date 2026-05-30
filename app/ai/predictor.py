@@ -3,13 +3,17 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import IsolationForest
+from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from app import models
 
 def train_and_predict_demand(db: Session, product_id: str) -> dict:
     """
-    Treina dinamicamente um modelo de regressão linear local para prever a demanda
-    e estimar a data de esgotamento do stock de um determinado produto.
+    Treina dinamicamente modelos locais de previsão de demanda para estimar o consumo
+    diário médio, previsão para 30 dias e data de esgotamento do stock de um determinado produto.
+    Utiliza uma abordagem híbrida:
+    - Média Móvel Inteligente (WMA) ponderada (70% peso nos últimos 7 dias, 30% nos últimos 30 dias).
+    - Random Forest Regressor treinado com features avançadas (dia da semana, dia do mês, mês, preço, stock).
+    - Correção estatística de lacunas temporais (reindexação contínua de calendário com preenchimento a zero).
     """
     # Buscar produto e histórico de vendas
     produto = db.query(models.Produto).filter(models.Produto.id == product_id).first()
@@ -33,38 +37,97 @@ def train_and_predict_demand(db: Session, product_id: str) -> dict:
             "recomendacao": "Aguarde mais vendas para calibração do modelo de IA."
         }
 
-    # Converter vendas em série temporal (agrupado por dia/data)
+    # 1. Converter vendas em série temporal e agrupar por data (incluindo preço unitário)
     data_list = []
     for item in itens:
         dt_str = item.fatura.data.split("T")[0]
         dt = datetime.strptime(dt_str, "%Y-%m-%d")
-        data_list.append({"data": dt, "quantidade": item.quantidade})
+        data_list.append({"data": dt, "quantidade": item.quantidade, "preco": item.preco_unitario})
     
     df = pd.DataFrame(data_list)
-    df = df.groupby("data").sum().reset_index()
+    df = df.groupby("data").agg({"quantidade": "sum", "preco": "mean"}).reset_index()
     df = df.sort_values("data")
 
-    # Criar coluna numérica de dias desde a primeira venda
+    # 2. Correção Estatística de Lacunas (Time-Series Reindexing)
+    # Garante que dias sem venda sejam considerados como consumo 0, evitando inflacionar a média diária
     first_date = df["data"].min()
-    df["dias"] = (df["data"] - first_date).dt.days
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    last_date = max(df["data"].max(), today)
+    
+    # Criar intervalo contínuo de calendário
+    all_dates = pd.date_range(start=first_date, end=last_date, freq="D")
+    df_full = pd.DataFrame({"data": all_dates})
+    
+    # Mesclar com os dados reais de venda
+    df_full = df_full.merge(df, on="data", how="left")
+    df_full["quantidade"] = df_full["quantidade"].fillna(0.0)
+    # Preencher lacunas de preço com o último conhecido, ou o preço de cadastro do produto
+    df_full["preco"] = df_full["preco"].ffill().bfill().fillna(produto.preco_unitario)
+    df_full["stock_atual"] = produto.stock
 
-    X = df[["dias"]].values
-    y = df["quantidade"].values
+    total_days = len(df_full)
 
-    # Treinar modelo de Regressão Linear local dinâmico
-    model = LinearRegression()
-    model.fit(X, y)
+    # 3. Opção 3 — Média Móvel Inteligente (Weighted Moving Average)
+    # Calcula consumo focado no curto prazo (7 dias) com suporte histórico (30 dias)
+    df_full = df_full.sort_values("data").reset_index(drop=True)
+    
+    mean_7 = float(df_full.tail(7)["quantidade"].mean())
+    mean_30 = float(df_full.tail(30)["quantidade"].mean())
+    
+    if total_days < 7:
+        consumo_wma = float(df_full["quantidade"].mean())
+    elif total_days < 30:
+        consumo_wma = 0.7 * mean_7 + 0.3 * float(df_full["quantidade"].mean())
+    else:
+        consumo_wma = 0.7 * mean_7 + 0.3 * mean_30
+        
+    consumo_wma = max(0.01, consumo_wma) # Evitar taxa nula absoluta
 
-    # Prever consumo diário médio (coeficiente de tendência + intercept)
-    dias_totais = (datetime.now() - first_date).days
-    consumo_diario_estimado = max(0.1, float(np.mean(y))) # Garantir taxa mínima de escoamento
+    # 4. Opções 1 e 2 — Random Forest Regressor com Engenharia de Features
+    # Engenharia de atributos temporais e mercadológicos locais
+    df_full["dia_semana"] = df_full["data"].dt.dayofweek
+    df_full["dia_mes"] = df_full["data"].dt.day
+    df_full["mes"] = df_full["data"].dt.month
+    
+    features = ["dia_semana", "dia_mes", "mes", "preco", "stock_atual"]
+    X = df_full[features].values
+    y = df_full["quantidade"].values
 
-    # Prever demanda para os próximos 30 dias
-    previsao_30d = consumo_diario_estimado * 30
+    # Treinar Random Forest Regressor local super leve (50 estimadores)
+    rf_model = RandomForestRegressor(n_estimators=50, random_state=42)
+    rf_model.fit(X, y)
+
+    # Gerar predição roll-forward passo-a-passo para os próximos 30 dias
+    future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq="D")
+    df_future = pd.DataFrame({"data": future_dates})
+    df_future["dia_semana"] = df_future["data"].dt.dayofweek
+    df_future["dia_mes"] = df_future["data"].dt.day
+    df_future["mes"] = df_future["data"].dt.month
+    df_future["preco"] = produto.preco_unitario
+    df_future["stock_atual"] = produto.stock
+    
+    X_future = df_future[features].values
+    y_pred_rf = rf_model.predict(X_future)
+    y_pred_rf = np.clip(y_pred_rf, 0, None)
+    previsao_rf_30d = float(np.sum(y_pred_rf))
+
+    # 5. Combinação Híbrida Inteligente
+    previsao_wma_30d = consumo_wma * 30
+
+    if total_days < 15:
+        # Menos de 15 dias de histórico: focar 100% na Média Móvel Inteligente para estabilidade absoluta
+        previsao_demanda_30d = previsao_wma_30d
+        consumo_diario_estimado = consumo_wma
+        confianca_modelo = "Média (Média Móvel Inteligente)"
+    else:
+        # Histórico robusto: mesclar os modelos para capturar sazonalidade (Random Forest) e consistência (WMA)
+        previsao_demanda_30d = 0.5 * previsao_wma_30d + 0.5 * previsao_rf_30d
+        consumo_diario_estimado = previsao_demanda_30d / 30.0
+        confianca_modelo = "Alta (WMA + Random Forest)"
 
     dias_ate_esgotar = round(produto.stock / consumo_diario_estimado) if produto.stock > 0 else 0
     
-    # Calcular recomendação
+    # Calcular recomendação analítica
     if dias_ate_esgotar == 0:
         recomendacao = "⚠️ Crítico: Sem stock! Efetuar encomenda urgente ao fornecedor."
     elif dias_ate_esgotar < 7:
@@ -78,9 +141,9 @@ def train_and_predict_demand(db: Session, product_id: str) -> dict:
         "produto_nome": produto.nome,
         "stock_atual": produto.stock,
         "consumo_diario_medio": round(consumo_diario_estimado, 2),
-        "previsao_demanda_30d": round(previsao_30d, 1),
+        "previsao_demanda_30d": round(previsao_demanda_30d, 1),
         "dias_ate_esgotar": dias_ate_esgotar,
-        "confianca_modelo": "Alta (Baseada em ML local)" if len(itens) > 10 else "Média (Pouco histórico)",
+        "confianca_modelo": confianca_modelo,
         "recomendacao": recomendacao
     }
 
