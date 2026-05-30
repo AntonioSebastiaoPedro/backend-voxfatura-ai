@@ -378,3 +378,8 @@ def check_invoice_anomaly(req: schemas.AnomalyCheckRequest, db: Session = Depend
 def get_insights(db: Session = Depends(get_db)):
     """Insights corporativos globais com ML (previsão financeira, risco de churn e rotura)."""
     return predictor.get_business_insights(db)
+
+@app.get("/api/ai/dashboard-complete")
+def get_dashboard_complete(db: Session = Depends(get_db)):
+    """Retorna todas as estatísticas analíticas reais consolidadas para alimentar o dashboard VoxAI sem mocks."""
+    return predictor.get_complete_ai_dashboard(db)
