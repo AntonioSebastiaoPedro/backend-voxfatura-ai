@@ -1,4 +1,4 @@
-# 🧠 VoxFatura AI — Motor Backend Preditivo
+# VoxFatura AI — Motor Backend Preditivo
 
 Este é o repositório do **Backend Engine** do **VoxFatura AI** — uma plataforma inteligente de faturação assistida por voz e inteligência artificial preditiva.
 
@@ -6,7 +6,7 @@ O motor backend é desenvolvido em **Python** utilizando **FastAPI**, com persis
 
 ---
 
-## 🏗️ Arquitetura do Sistema
+## Arquitetura do Sistema
 
 ```mermaid
 graph TD
@@ -27,7 +27,7 @@ graph TD
 
 ---
 
-## 🛠️ Como Iniciar o Backend
+## Como Iniciar o Backend
 
 ### 1. Requisitos Prévios
 * Python 3.10 ou superior
@@ -77,7 +77,7 @@ O servidor estará ativo em: **`http://localhost:8000`**
 
 ---
 
-## 🐳 Como Iniciar via Docker (Recomendado 🚀)
+## Como Iniciar via Docker (Recomendado)
 
 O backend possui suporte completo e otimizado a **Docker** e **Docker Compose**, separando a aplicação FastAPI e a base de dados PostgreSQL em containers isolados seguindo as melhores práticas.
 
@@ -111,23 +111,23 @@ docker compose down
 
 ---
 
-## 📡 Referência Rápida da API
+## Referência Rápida da API
 
-### 👥 Clientes
+### Clientes
 * `GET /api/clientes` — Retorna a lista de todos os clientes no PostgreSQL
 * `POST /api/clientes` — Cria um novo cliente
 * `PUT /api/clientes/{id}` — Atualiza os dados cadastrais de um cliente
 
-### 📦 Produtos & Inventário
+### Produtos & Inventário
 * `GET /api/produtos` — Retorna a lista de produtos e níveis de stock
 * `POST /api/produtos` — Cadastra um novo produto
 * `PUT /api/produtos/{id}` — Atualiza dados e preços do produto
 
-### 🧾 Faturas
+### Faturas
 * `GET /api/faturas` — Lista todas as faturas (confirmadas e rascunhos)
 * `POST /api/faturas` — Cria e confirma uma fatura, atualizando o stock de produtos e saldos de crédito do cliente no PostgreSQL
 
-### 🔮 Inteligência Artificial (AI)
+### Inteligência Artificial (AI)
 * `POST /api/ai/voice-command` — Processa transcrições de comandos de voz e retorna ações estruturadas da fatura (`SET_CLIENT`, `ADD_ITEM`, `CONFIRM_INVOICE`)
 * `GET /api/ai/prediction/demand/{product_id}` — Treina e executa regressão linear scikit-learn para prever vendas e stock-out
 * `GET /api/ai/business-insights` — Retorna análises macro de faturamento, score de saúde de inventário e deteção de churn
