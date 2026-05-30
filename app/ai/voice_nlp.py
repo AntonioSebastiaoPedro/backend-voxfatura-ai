@@ -47,7 +47,7 @@ def parse_voice_command(db: Session, raw_text: str) -> dict:
 
     # 3. COMANDO: DEFINIR CLIENTE
     # Ex: "faturar para joao manuel silva", "cliente maria"
-    client_match = re.search(r'(?:cliente|faturar\spara|para\so\scliente|para\sa\scliente)\s+(.+)', normalized)
+    client_match = re.search(r'(?:cliente|faturar\spara|fatorar\spara|para\so\scliente|para\sa\scliente)\s+(.+)', normalized)
     if client_match:
         client_query = client_match.group(1).strip()
         # Buscar cliente correspondente por nome na base de dados
@@ -132,12 +132,17 @@ def parse_voice_command(db: Session, raw_text: str) -> dict:
             }
 
     # 5. COMANDO: REMOVER PRODUTO
-    # Ex: "remover arroz", "tirar feijao"
+    # Ex: "remover arroz", "remover 2 arroz", "tirar feijao"
     remove_match = any(k in normalized for k in ["remover", "tirar", "apagar", "eliminar"])
     if remove_match:
+        # Extrair quantidade (procurar por números no texto)
+        numbers = re.findall(r'\b\d+\b', normalized)
+        quantidade = int(numbers[0]) if numbers else None
+        
         clean_prod_query = normalized
-        for k in ["remover", "tirar", "apagar", "eliminar"]:
+        for k in ["remover", "tirar", "apagar", "eliminar", "unidades", "unidade", "un", "unids"]:
             clean_prod_query = clean_prod_query.replace(k, "")
+        clean_prod_query = re.sub(r'\b\d+\b', '', clean_prod_query) # remover o número
         clean_prod_query = " ".join(clean_prod_query.split())
         
         if not clean_prod_query:
@@ -158,10 +163,12 @@ def parse_voice_command(db: Session, raw_text: str) -> dict:
                 best_product = p
 
         if best_product:
+            msg = f"Removido por voz: {quantidade}x {best_product.nome}" if quantidade else f"Removido por voz: {best_product.nome}"
             return {
                 "action": "REMOVE_ITEM",
                 "product_id": best_product.id,
-                "message": f"Removido por voz: {best_product.nome}"
+                "quantidade": quantidade,
+                "message": msg
             }
         else:
             return {
