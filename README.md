@@ -131,3 +131,48 @@ docker compose down
 * `POST /api/ai/voice-command` — Processa transcrições de comandos de voz e retorna ações estruturadas da fatura (`SET_CLIENT`, `ADD_ITEM`, `CONFIRM_INVOICE`)
 * `GET /api/ai/prediction/demand/{product_id}` — Treina e executa regressão linear scikit-learn para prever vendas e stock-out
 * `GET /api/ai/business-insights` — Retorna análises macro de faturamento, score de saúde de inventário e deteção de churn
+
+---
+
+## Dicas de Inicialização e Resolução de Problemas (Local)
+
+Durante a inicialização local do PostgreSQL via `pg_ctl` com o cluster localizado em `back/db_data/`, pode ocorrer o seguinte erro de permissão negada ao tentar criar o arquivo de lock/socket:
+```text
+FATAL:  could not create lock file "/var/run/postgresql/.s.PGSQL.5432.lock": Permission denied
+```
+
+### Solução Aplicada
+Para rodar o PostgreSQL de forma totalmente isolada no utilizador local sem necessitar de privilégios de administrador (`sudo`):
+
+1. **Configuração do Socket em `/tmp`:**
+   No arquivo `db_data/postgresql.conf`, descomente e ajuste a diretoria dos sockets unix para `/tmp` (onde qualquer utilizador tem permissão de escrita):
+   ```ini
+   unix_socket_directories = '/tmp'
+   ```
+
+2. **Configuração da Porta local (`5434`):**
+   Garanta que a porta em `db_data/postgresql.conf` está configurada para `5434` (para não conflituar com instâncias de sistema rodando na porta padrão):
+   ```ini
+   port = 5434
+   ```
+
+3. **Passos Rápidos para Colocar Tudo a Rodar:**
+
+   * **Passo 1: Iniciar o PostgreSQL Local**
+     ```bash
+     /usr/lib/postgresql/16/bin/pg_ctl -D db_data start
+     ```
+     
+   * **Passo 2: Ativar o Ambiente Virtual e Instalar Dependências**
+     ```bash
+     source venv/bin/activate
+     pip install -r requirements.txt
+     ```
+     
+   * **Passo 3: Iniciar o Servidor FastAPI**
+     ```bash
+     uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+     ```
+
+O backend estará totalmente funcional e conectado na porta **`http://localhost:8000`**, pronto a responder aos pedidos do frontend de forma integrada e segura.
+
